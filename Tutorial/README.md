@@ -269,18 +269,17 @@ Console.WriteLine();
 Console.WriteLine("-- Listening on {0}...",
     device.Description);
 
-Packet packet = null;
+PacketCapture packet;
 
 // Keep capture packets using GetNextPacket()
-while(device.GetNextPacket(packet) != null )
-{
-    // Prints the time and length of each received packet
-    DateTime time = packet.PcapHeader.Date;
-    int len = packet.PcapHeader.PacketLength;
+do {
+    device.GetNextPacket(out packet);
+    DateTime time = packet.Header.Timeval.Date;
+    int len = packet.Data.Length;
     Console.WriteLine("{0}:{1}:{2},{3} Len={4}",
         time.Hour, time.Minute, time.Second,
         time.Millisecond, len);
-}
+} while (packet.Data.IsEmpty == false);
 
 // Close the pcap device
 device.Close();
