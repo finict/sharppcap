@@ -188,12 +188,12 @@ Now that we've seen how to obtain an adapter to play with, let's start the real 
 The function that opens a device for capture is `Open()` which is overloaded with some arguments as follows:
 
 *   `Open()`
-*   `Open(DeviceMode mode)`
-*   `Open(DeviceMode mode, int read_timeout)`
+*   `Open(DeviceModes mode)`
+*   `Open(DeviceModes mode, int read_timeout)`
 
 The above two arguments deserve some further explanation.
 
-`DeviceMode` In normal mode (`DeviceMode.Normal`), a network adapter only captures packets addressed directly to it; the packets exchanged by other hosts on the network are ignored. Instead, when the adapter is in promiscuous mode (`DeviceMode.Promiscuous`) it captures all packets whether they are destined to it or not. This means that on shared media (like non-switched Ethernet), libpcap/WinPcap will be able to capture the packets of other hosts. Promiscuous mode is the default for most capture applications, so we enable it in the following example. NOTE: Promiscuous mode can be detected via network means so if you are capturing in promiscuous mode you may be able to be detected by other entities on the network. Search for "detect promiscuous" via a web search engine for more information.
+`DeviceModes` In normal mode (`DeviceModes.Normal`), a network adapter only captures packets addressed directly to it; the packets exchanged by other hosts on the network are ignored. Instead, when the adapter is in promiscuous mode (`DeviceModes.Promiscuous`) it captures all packets whether they are destined to it or not. This means that on shared media (like non-switched Ethernet), libpcap/WinPcap will be able to capture the packets of other hosts. Promiscuous mode is the default for most capture applications, so we enable it in the following example. NOTE: Promiscuous mode can be detected via network means so if you are capturing in promiscuous mode you may be able to be detected by other entities on the network. Search for "detect promiscuous" via a web search engine for more information.
 
 `read_timeout`: Specifies the read timeout, in milliseconds. A read on the adapter (for example, using the `GetNextPacket()` function) will always return after `read_timeout` milliseconds, even if no packets are available from the network. `read_timeout` also defines the interval between statistical reports if the adapter is in statistical mode (see the _[Gathering statistics on the network traffic](#statistics)_ section). Setting `read_timeout` to 0 means no timeout, a read on the adapter never returns if no packets arrive. A -1 timeout on the other side causes a read on the adapter to always return immediately.
 
@@ -210,7 +210,7 @@ device.OnPacketArrival +=
 
 // Open the device for capturing
 int readTimeoutMilliseconds = 1000;
-device.Open(DeviceMode.Promiscuous, readTimeoutMilliseconds);
+device.Open(DeviceModes.Promiscuous, readTimeoutMilliseconds);
 
 Console.WriteLine("-- Listening on {0}, hit 'Enter' to stop...",
     device.Description);
@@ -234,10 +234,10 @@ And here is our packet handler implementation:
 /// <summary>
 /// Prints the time and length of each received packet
 /// </summary>
-private static void device_OnPacketArrival(object sender, CaptureEventArgs packet)
+private static void device_OnPacketArrival(object sender, PacketCapture packet)
 {
-    DateTime time = e.Packet.Timeval.Date;
-    int len = e.Packet.Data.Length;
+    DateTime time = e.GetPacket().Timeval.Date;
+    int len = e.GetPacket().Data.Length;
     Console.WriteLine("{0}:{1}:{2},{3} Len={4}",
         time.Hour, time.Minute, time.Second, time.Millisecond, len);
 }
@@ -263,7 +263,7 @@ ICaptureDevice device = devices[i];
 
 // Open the device for capturing
 int readTimeoutMilliseconds = 1000;
-device.Open(DeviceMode.Promiscuous, readTimeoutMilliseconds);
+device.Open(DeviceModes.Promiscuous, readTimeoutMilliseconds);
 
 Console.WriteLine();
 Console.WriteLine("-- Listening on {0}...",
@@ -272,7 +272,7 @@ Console.WriteLine("-- Listening on {0}...",
 Packet packet = null;
 
 // Keep capture packets using GetNextPacket()
-while((packet=device.GetNextPacket()) != null )
+while(device.GetNextPacket(packet) != null )
 {
     // Prints the time and length of each received packet
     DateTime time = packet.PcapHeader.Date;
@@ -300,7 +300,7 @@ The filter expression we use in the following snippet is "ip and tcp", which mea
 ```cs
 // Open the device for capturing
 int readTimeoutMilliseconds = 1000;
-device.Open(DeviceMode.Promiscuous, readTimeoutMilliseconds);
+device.Open(DeviceModes.Promiscuous, readTimeoutMilliseconds);
 
 // tcpdump filter to capture only TCP/IP packets
 string filter = "ip and tcp";
@@ -336,7 +336,7 @@ Now that the captureFileWriter exists we can look at the OnPacketArrival handler
 
 ```cs
 // write the packet to the file
-captureFileWriter.Write(e.Packet);
+captureFileWriter.Write(e.GetPacket());
 Console.WriteLine("Packet dumped to file.");
 ```
 
@@ -370,13 +370,13 @@ Now that we are able to capture and filter network traffic, we want to put our k
 /// for each TCP/IP packet received on the network
 /// </summary>
 private static void device_OnPacketArrival(
-    object sender, CaptureEventArgs e)
+    object sender, PacketCapture e)
 {
-    var tcp = (TcpPacket)e.Packet.Extract(typeof(TcpPacket));
+    var tcp = (TcpPacket)e.GetPacket().Extract(typeof(TcpPacket));
     if(tcp != null)
     {
-        DateTime time = e.Packet.Timeval.Date;
-        int len = e.Packet.Data.Length;
+        DateTime time = e.GetPacket().Timeval.Date;
+        int len = e.GetPacket().Data.Length;
 
         string srcIp = tcp.SourceAddress;
         string dstIp = tcp.DestinationAddress;
@@ -384,14 +384,14 @@ private static void device_OnPacketArrival(
         Console.WriteLine("{0}:{1}:{2},{3} Len={4}",
             time.Hour, time.Minute, time.Second,
             time.Millisecond, len);
-        Console.WriteLine(e.Packet.ToString());
+        Console.WriteLine(e.GetPacket().ToString());
     }
 }
 ```
 
 If you take a look at the [UDP example](http://www.winpcap.org/docs/docs_41b5/html/group__wpcap__tut6.html) of the original WinPcap tutorial you will see how complex it is to parse the packets (although UDP is a bit simpler to parse than TCP in our example) directly from the raw data bytes provided by the WinPcap library. Luckily for us, SharpPcap provides some useful packet analyzing classes for some common protocols (e.g. TCP, UDP, ICMP and others). These analyzing classes were initially a direct C# translation from [JPcap](http://jpcap.sourceforge.net/), a Java wrapper for libpcap/WinPcap similar to SharpPcap, but significant changes have been made to make them fit better into .NET. All of the packet parsing and generation code can be found in the `PacketDotNet` namespace in the PacketDotNet assembly.
 
-As you can see, in our packet handler we first attempt to extract the Tcp packet encapsulated in the packet that was captured on the line. If one was found, and it should be since our filter selects only tcp packets, we can then access its properties. If we also wanted to see the IP packet properties these could be accessed via `var ip = (IpPacket)e.Packet.Extract(typeof(IpPacket));`
+As you can see, in our packet handler we first attempt to extract the Tcp packet encapsulated in the packet that was captured on the line. If one was found, and it should be since our filter selects only tcp packets, we can then access its properties. If we also wanted to see the IP packet properties these could be accessed via `var ip = (IpPacket)e.GetPacket().Extract(typeof(IpPacket));`
 
 ```
 Available devices:
@@ -595,7 +595,7 @@ device.OnPcapStatistics +=
 
 // Open the device for capturing
 int readTimeoutMilliseconds = 1000;
-device.Open(DeviceMode.Promiscuous, readTimeoutMilliseconds);
+device.Open(DeviceModes.Promiscuous, readTimeoutMilliseconds);
 
 // Handle TCP packets only
 device.Filter = "tcp";
@@ -802,7 +802,7 @@ namespace QueuingPacketsForBackgroundProcessing
         /// <summary>
         /// Prints the time and length of each received packet
         /// </summary>
-        private static void device_OnPacketArrival(object sender, CaptureEventArgs e)
+        private static void device_OnPacketArrival(object sender, PacketCapture e)
         {
             // print out periodic statistics about this device
             var Now = DateTime.Now; // cache 'DateTime.Now' for minor reduction in cpu overhead
@@ -817,7 +817,7 @@ namespace QueuingPacketsForBackgroundProcessing
             // the same time
             lock(QueueLock)
             {
-                PacketQueue.Add(e.Packet);
+                PacketQueue.Add(e.GetPacket());
             }
         }
 
